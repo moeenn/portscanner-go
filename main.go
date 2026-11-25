@@ -5,26 +5,34 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
-	"portscanner/internal/ip"
+	"portscanner/internal/host"
 	"portscanner/internal/scanner"
+	"time"
 )
 
 func run() error {
-	hostPtr := flag.String("host", "", "IP address of the host to scan")
+	hostPtr := flag.String("host", "", "URL or IP address of the host to scan")
+	maxParallerPtr := flag.Int("parallel", 4, "Maximum number of parallel workers")
 	flag.Parse()
-	host := *hostPtr
 
-	if !ip.IsValid(host) {
-		return fmt.Errorf("invalid IP address: %s", host)
+	host, err := host.Validate(hostPtr)
+	if err != nil {
+		return fmt.Errorf("invalid host: %s", err)
 	}
 
 	ports := scanner.CommonPorts()
 
 	slog.Info("starting scan", "host", host)
-	openPorts := scanner.Scan(host, ports)
+	openPorts := scanner.Scan(scanner.ScanArgs{
+		Host:        host,
+		Ports:       ports,
+		Timeout:     time.Second,
+		MaxParallel: *maxParallerPtr,
+	})
 	slog.Info("scan complete")
 
 	fmt.Println()
+
 	for _, p := range openPorts {
 		fmt.Printf("%-15s: %d\n", p.Name, p.Port)
 	}

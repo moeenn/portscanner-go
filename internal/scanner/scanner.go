@@ -10,7 +10,8 @@ import (
 )
 
 const (
-	checkTimeout time.Duration = time.Second
+	checkTimeout time.Duration = time.Second * 2
+	maxParallel  int           = 4
 )
 
 type PortGroup struct {
@@ -55,20 +56,38 @@ func isPortOpen(host string, port int) bool {
 	return true
 }
 
-func Scan(host string, ports []PortGroup) []PortWithName {
+type ScanArgs struct {
+	Host        string
+	Ports       []PortGroup
+	MaxParallel int
+	Timeout     time.Duration
+}
+
+func (args *ScanArgs) normalize() {
+	if args.MaxParallel == 0 {
+		args.MaxParallel = maxParallel
+	}
+
+	if args.Timeout == 0 {
+		args.Timeout = checkTimeout
+	}
+}
+
+func Scan(args ScanArgs) []PortWithName {
+	args.normalize()
 	result := make([]PortWithName, 0, 5)
 
-	sem := semaphore.New(4)
+	sem := semaphore.New(args.MaxParallel)
 	var wg sync.WaitGroup
 
-	for _, pg := range ports {
+	for _, pg := range args.Ports {
 		for _, p := range pg.Ports {
 			wg.Go(func() {
 				sem.Acquire()
 				defer sem.Release()
 
 				slog.Info("checking port", "port", p)
-				if isPortOpen(host, p) {
+				if isPortOpen(args.Host, p) {
 					result = append(result, PortWithName{Port: p, Name: pg.Name})
 				}
 			})
